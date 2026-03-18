@@ -5,6 +5,7 @@
 </p>
 <h1 align="center"><a href="https://github.com/linchuncheng/ddd4j">DDD4J基础框架</a></h1>
 <h4 align="center">基于DDD（领域驱动设计）并支持SaaS平台的单体微服务基础框架</h4>
+<p align="center"><a href="README_EN.md">English</a> | 中文</p>
 <p align="center">
   <img src="https://img.shields.io/badge/language-JDK17-red.svg">
   <img src="https://img.shields.io/hexpm/l/plug.svg">
