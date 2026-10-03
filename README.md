@@ -211,7 +211,29 @@ ddd4j:
 | api | 对外契约：dto、event、service 接口 |
 | adapter | http / rpc / mq / repo 实现（仓储实现放这里） |
 | application | 用例编排、事务边界、事件处理 |
-| domain | 聚合、业务规则、repo 接口 |
+| domain | 聚合行为（纯函数、不变式、状态机）、repo 接口 |
+
+### 模型与实体：单一类型（强制约定）
+
+同一张表**只允许存在一份数据定义**：领域模型即持久化实体（标注 `@TableName`），直接作为 `Repository` 的泛型参数。领域层放的是**行为**（如周期推算、金额分摊这类纯函数），不是数据的第二份拷贝。
+
+| 位置 | 放什么 | 不放什么 |
+|------|--------|----------|
+| 数据类（每个上下文一个包，如 `entity` 或 `domain/model`） | 唯一的数据类：`@TableName` + 业务方法 | — |
+| domain | 纯函数计算器、聚合行为 | 与数据类平行的 Model 镜像 |
+
+理由：AI 改代码时只修改上下文里的文件，两份字段定义必然走向不一致；反射式拷贝（BeanUtils/copyProperties）让这种不一致**编译器看不见、运行时才丢数据**。消灭重复 = 消灭这类静默错误。
+
+确需分离的场景（富聚合需要构造纪律、一个聚合来自多张表），必须**显式分离**：仓储落在 adapter 层操作 PO，领域模型独立存在，转换用手写映射或 MapStruct（编译期校验漏字段）——**禁止任何反射拷贝**：
+
+```java
+// adapter/repo 层：操作 PO
+@Repository
+public class OrderRepository extends MybatisRepository<OrderPO, OrderQuery> { ... }
+
+// application 层：显式转换，字段接线编译期可见
+Order order = new Order(po.getId(), po.getItems(), po.getState());
+```
 
 ## 从 3.x 迁移
 
