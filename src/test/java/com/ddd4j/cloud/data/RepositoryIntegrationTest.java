@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 仓储 + 租户隔离 + 审计填充的 H2 集成测试（字段风格对齐 fengqun-scm：字符串ID、操作人审计）
+ * 仓储 + 租户隔离 + 审计填充的 H2 集成测试（字符串ID、操作人审计）
  */
 @SpringBootTest(classes = com.ddd4j.cloud.testsupport.TestApplication.class)
 class RepositoryIntegrationTest {
@@ -143,7 +143,7 @@ class RepositoryIntegrationTest {
     }
 
     @Test
-    void pageReturnsFengqunContractShape() {
+    void pageReturnsContractShape() {
         for (int i = 0; i < 25; i++) {
             repository.insert(user("u" + i, i));
         }

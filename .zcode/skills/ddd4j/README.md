@@ -8,14 +8,14 @@ DDD4J（AI-first 极简 DDD 内核：契约 + 显式仓储 + Web 核心）的**�
 - `source/` —— 框架全部主源码（24 个类，按包路径存放，整棵复制即接入）
 - `test-template/` —— H2 集成验收测试，照抄即可验证接入是否成功
 
-`source/` 与 `test-template/` 是 `scripts/build-skill.sh` 的构建产物，勿手改。
+`source/` 与 `test-template/` 是框架源码快照，勿手改。
 
 ## 安装
 
 拷贝本目录到任意支持 SKILL.md 约定的 Agent 技能目录（默认跨 Agent 目录）：
 
 ```bash
-cp -R .zcode/skills/ddd4j ~/.agents/skills/ddd4j   # 或 ~/.claude/skills/ 等
+cp -R ddd4j ~/.agents/skills/ddd4j   # 或 ~/.claude/skills/ 等任意 Agent 技能目录
 ```
 
 ## 使用
@@ -32,4 +32,4 @@ JDK 21 / Spring Boot 3.5.x / MyBatis-Plus 3.5.x（响应契约：code 字符串�
 
 ## 更新
 
-框架代码变更后，在 ddd4j 仓库 lite 分支运行 `./scripts/build-skill.sh` 重建并安装到本机。
+框架更新后，重新安装/更新本技能即可获取最新源码快照。

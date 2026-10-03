@@ -12,7 +12,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 测试模型：模型即实体，直接标注 MP 注解；字段风格对齐 fengqun-scm（字符串ID、操作人审计）
+ * 测试模型：模型即实体，直接标注 MP 注解；字符串ID、操作人审计
  */
 @Data
 @TableName("t_user")

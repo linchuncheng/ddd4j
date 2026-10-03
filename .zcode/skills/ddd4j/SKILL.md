@@ -15,7 +15,7 @@ DDD4J 是 AI-first 极简 DDD 内核：契约 + 显式仓储 + Web 核心，约 
 - `source/`：框架全部主源码，`java/` 按包路径存放，`resources/` 含自动装配声明
 - `test-template/`：验收测试与支撑类（含 H2 集成测试），照抄即可验证接入是否成功
 
-`source/` 与 `test-template/` 由 ddd4j 仓库的 `scripts/build-skill.sh` 从 `src/` 生成，**勿手改**；上游更新后重新运行该脚本同步。
+`source/` 与 `test-template/` 是框架源码快照，**勿手改**；框架更新后重新安装/更新本技能即可。
 
 ## 接入流程
 
@@ -24,7 +24,7 @@ DDD4J 是 AI-first 极简 DDD 内核：契约 + 显式仓储 + Web 核心，约 
 | 目标工程情况 | 复制范围 | 关键动作 |
 |---|---|---|
 | **全新工程**（无既有 web 约定） | `source/` 全量：contract + context + data + web + config | 无 |
-| **已有统一响应/异常处理的工程**（如 fengqun-scm 自带 R/PageData/GlobalExceptionHandler） | 只复制 `context/` + `data/` 两个包 | 见下方"冲突处理"，避免双份 R 和双份异常处理器 |
+| **已有统一响应/异常处理的工程**（自带 R/PageData/全局异常处理器） | 只复制 `context/` + `data/` 两个包 | 见下方"冲突处理"，避免双份 R 和双份异常处理器 |
 
 ### 第二步：复制源码
 

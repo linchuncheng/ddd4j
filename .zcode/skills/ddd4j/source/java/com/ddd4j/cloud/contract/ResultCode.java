@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * 响应码约定，与 fengqun-scm 现网契约保持一致：字符串编码，成功为 "200"
+ * 响应码约定：字符串编码，成功 "200"、客户端错误 "4xx"、服务端错误 "5xx"
  *
  * @author Jensen
  */
