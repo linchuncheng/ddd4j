@@ -19,12 +19,12 @@ class AppContextTest {
 
     @Test
     void setAndRead() {
-        AppContext.current().setUserId(1L);
-        AppContext.current().setTenantId(2L);
+        AppContext.current().setUserId("u-1");
+        AppContext.current().setTenantId("t-2");
         AppContext.current().setTraceId("t-123");
 
-        assertThat(AppContext.userId()).isEqualTo(1L);
-        assertThat(AppContext.tenantId()).isEqualTo(2L);
+        assertThat(AppContext.userId()).isEqualTo("u-1");
+        assertThat(AppContext.tenantId()).isEqualTo("t-2");
         assertThat(AppContext.traceId()).isEqualTo("t-123");
     }
 
@@ -37,7 +37,7 @@ class AppContextTest {
 
     @Test
     void snapshotAndRestore() {
-        AppContext.current().setTenantId(7L);
+        AppContext.current().setTenantId("t-7");
         AppContext.current().setAttribute("k", "v");
         AppContext snapshot = AppContext.snapshot();
 
@@ -45,27 +45,27 @@ class AppContextTest {
         assertThat(AppContext.tenantId()).isNull();
 
         AppContext.restore(snapshot);
-        assertThat(AppContext.tenantId()).isEqualTo(7L);
+        assertThat(AppContext.tenantId()).isEqualTo("t-7");
         assertThat(AppContext.getAttribute("k")).isEqualTo("v");
     }
 
     @Test
     void restoreNullClearsContext() {
-        AppContext.current().setTenantId(7L);
+        AppContext.current().setTenantId("t-7");
         AppContext.restore(null);
         assertThat(AppContext.tenantId()).isNull();
     }
 
     @Test
     void wrapCarriesContextAcrossThreads() throws Exception {
-        AppContext.current().setTenantId(42L);
+        AppContext.current().setTenantId("42");
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
-            AtomicReference<Long> seen = new AtomicReference<>();
+            AtomicReference<String> seen = new AtomicReference<>();
             executor.submit(AppContext.wrap(() -> seen.set(AppContext.tenantId()))).get(5, TimeUnit.SECONDS);
-            assertThat(seen.get()).isEqualTo(42L);
+            assertThat(seen.get()).isEqualTo("42");
             // 任务结束后不应污染池化线程
-            AtomicReference<Long> afterTask = new AtomicReference<>();
+            AtomicReference<String> afterTask = new AtomicReference<>();
             executor.submit(() -> afterTask.set(AppContext.tenantId())).get(5, TimeUnit.SECONDS);
             assertThat(afterTask.get()).isNull();
         } finally {

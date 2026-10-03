@@ -47,17 +47,22 @@
 
 ```java
 // 1. 模型：直接标注 MyBatis-Plus 注解
+// ID/租户/操作人用 String（雪花ID字符串化，对齐 fengqun-scm 风格）
 @Data
 @TableName("t_user")
 public class User {
     @TableId(type = IdType.ASSIGN_ID)
-    private Long id;
+    private String id;
     private String username;
     private Integer age;
-    private Long tenantId;
+    private String tenantId;
+    @OnCreateBy                     // 插入时自动填充当前用户
+    private String createdBy;
+    @OnUpdateBy                     // 插入和更新时自动填充当前用户（无条件覆盖）
+    private String updatedBy;
     @OnCreate                       // 插入时自动填充当前时间
     private LocalDateTime createTime;
-    @OnUpdate                       // 插入和更新时自动填充当前时间
+    @OnUpdate                       // 插入和更新时自动填充当前时间（无条件覆盖）
     private LocalDateTime updateTime;
 }
 
@@ -141,14 +146,31 @@ public void rename(Long id, String name) {
 
 ## 内置能力
 
+### 审计字段
+
+四个注解声明审计字段，填充发生在仓储写入时（显式、不依赖 MyBatis-Plus 内部机制）：
+
+| 注解 | 填充时机 | 值 | 覆盖语义 |
+|------|---------|-----|---------|
+| `@OnCreate` | 插入 | 当前时间（LocalDateTime/LocalDate/Date/Long 毫秒） | 已有值不覆盖（可回填历史数据） |
+| `@OnUpdate` | 插入 + 更新 | 当前时间 | **无条件覆盖** |
+| `@OnCreateBy` | 插入 | 当前用户（`AppContext.userId()`，String） | 已有值不覆盖 |
+| `@OnUpdateBy` | 插入 + 更新 | 当前用户 | **无条件覆盖** |
+
+`update_time/update_by` 记录的就是"这次是谁改的"，所以更新时无条件覆盖；`create_*` 尊重显式赋值，便于导入和订正。上下文无用户（系统任务）时操作人保持原值。
+
 ### 租户隔离
 
-默认开启。写入时自动追加 `tenant_id`，查询时自动过滤（基于 MyBatis-Plus `TenantLineInnerInterceptor`），租户值来自 `AppContext`。当前请求没有租户时不过滤（适合平台级任务）。
+默认开启。写入时自动追加 `tenant_id`，查询时自动过滤（基于 MyBatis-Plus `TenantLineInnerInterceptor`），租户值来自 `AppContext`（String 类型，与雪花ID字符串化风格一致）。
+
+**缺省语义是 fail-closed**：上下文没有租户时，查询直接失败而不是静默读到全量数据——这是 SaaS 系统的安全底线：
 
 ```java
 users.list(query);                 // 自动追加 tenant_id = 当前租户
-users.list(query.ignoreTenant());  // 显式跳过，仅本次生效
+users.list(query.ignoreTenant());  // 显式豁免，仅本次生效——平台级任务/系统作业用这个
 ```
+
+全局豁免平台表用配置：`ddd4j.tenant.exclude-tables`（如 sys_user 等无租户列的表）。
 
 ### 请求上下文
 
@@ -156,9 +178,11 @@ users.list(query.ignoreTenant());  // 显式跳过，仅本次生效
 
 | 请求头 | 含义 |
 |--------|------|
-| `X-User-Id` | 当前用户 |
-| `X-Tenant-Id` | 当前租户 |
+| `X-User-Id` | 当前用户（字符串，如雪花ID） |
+| `X-Tenant-Id` | 当前租户（字符串） |
 | `X-Trace-Id` | 链路ID，缺省自动生成并回写响应头 |
+
+自研认证体系（JWT/网关）只需在认证通过后把这两个响应头值写入即可接入，无需替换安全栈。
 
 跨线程显式传递，不做任何隐式继承：
 

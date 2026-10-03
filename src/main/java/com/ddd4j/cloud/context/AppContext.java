@@ -17,8 +17,8 @@ public final class AppContext {
 
     private static final ThreadLocal<AppContext> HOLDER = new ThreadLocal<>();
 
-    private Long userId;
-    private Long tenantId;
+    private String userId;
+    private String tenantId;
     private String traceId;
     private final Map<String, Object> attributes = new HashMap<>(4);
 
@@ -34,12 +34,12 @@ public final class AppContext {
         return context;
     }
 
-    public static Long userId() {
+    public static String userId() {
         AppContext context = HOLDER.get();
         return context == null ? null : context.userId;
     }
 
-    public static Long tenantId() {
+    public static String tenantId() {
         AppContext context = HOLDER.get();
         return context == null ? null : context.tenantId;
     }
@@ -49,11 +49,11 @@ public final class AppContext {
         return context == null ? null : context.traceId;
     }
 
-    public static void setUserId(Long userId) {
+    public static void setUserId(String userId) {
         current().userId = userId;
     }
 
-    public static void setTenantId(Long tenantId) {
+    public static void setTenantId(String tenantId) {
         current().tenantId = tenantId;
     }
 

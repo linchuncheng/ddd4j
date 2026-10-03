@@ -70,8 +70,8 @@ class WebLayerTest {
                         .header("X-Tenant-Id", "7")
                         .header("X-Trace-Id", "trace-abc"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.userId").value(42))
-                .andExpect(jsonPath("$.data.tenantId").value(7))
+                .andExpect(jsonPath("$.data.userId").value("42"))
+                .andExpect(jsonPath("$.data.tenantId").value("7"))
                 .andExpect(jsonPath("$.data.traceId").value("trace-abc"))
                 .andReturn();
         assertThat(result.getResponse().getHeader("X-Trace-Id")).isEqualTo("trace-abc");

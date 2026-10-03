@@ -31,11 +31,11 @@ public class ContextInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
         AppContext context = AppContext.current();
-        Long userId = parseLong(request.getHeader(userIdHeader));
+        String userId = normalize(request.getHeader(userIdHeader));
         if (userId != null) {
             context.setUserId(userId);
         }
-        Long tenantId = parseLong(request.getHeader(tenantIdHeader));
+        String tenantId = normalize(request.getHeader(tenantIdHeader));
         if (tenantId != null) {
             context.setTenantId(tenantId);
         }
@@ -55,14 +55,10 @@ public class ContextInterceptor implements HandlerInterceptor {
         MDC.clear();
     }
 
-    private Long parseLong(String value) {
+    private String normalize(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
-        try {
-            return Long.valueOf(value);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        return value.trim();
     }
 }

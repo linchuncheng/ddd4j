@@ -11,12 +11,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * 仓储 + 租户隔离 + 审计填充的 H2 集成测试
+ * 仓储 + 租户隔离 + 审计填充的 H2 集成测试（字段风格对齐 fengqun-scm：字符串ID、操作人审计）
  */
 @SpringBootTest(classes = com.ddd4j.cloud.testsupport.TestApplication.class)
 class RepositoryIntegrationTest {
@@ -27,7 +29,8 @@ class RepositoryIntegrationTest {
     @BeforeEach
     void setUp() {
         AppContext.clear();
-        AppContext.current().setTenantId(1L);
+        AppContext.current().setTenantId("t-1");
+        AppContext.current().setUserId("u-1");
         repository.delete(new UserQuery().ignoreTenant());
     }
 
@@ -51,23 +54,52 @@ class RepositoryIntegrationTest {
 
         User loaded = repository.get(user.getId());
         assertThat(loaded.getUsername()).isEqualTo("tom");
-        // 审计填充
+        // 审计填充：时间 + 操作人
         assertThat(loaded.getCreateTime()).isNotNull();
         assertThat(loaded.getUpdateTime()).isNotNull();
+        assertThat(loaded.getCreatedBy()).isEqualTo("u-1");
+        assertThat(loaded.getUpdatedBy()).isEqualTo("u-1");
         // 租户随上下文自动写入
-        assertThat(loaded.getTenantId()).isEqualTo(1L);
+        assertThat(loaded.getTenantId()).isEqualTo("t-1");
+    }
+
+    @Test
+    void updateOverwritesUpdateAuditButKeepsCreateAudit() {
+        User tom = user("tom", 18);
+        repository.insert(tom);
+        assertThat(tom.getCreatedBy()).isEqualTo("u-1");
+        LocalDateTime firstUpdateTime = tom.getUpdateTime();
+
+        AppContext.current().setUserId("u-2");
+        tom.setAge(19);
+        assertThat(repository.updateById(tom)).isTrue();
+
+        User loaded = repository.get(tom.getId());
+        // update_by / update_time 无条件覆盖；create_* 保持首次写入
+        assertThat(loaded.getUpdatedBy()).isEqualTo("u-2");
+        assertThat(loaded.getUpdateTime()).isAfter(firstUpdateTime);
+        assertThat(loaded.getCreatedBy()).isEqualTo("u-1");
+    }
+
+    @Test
+    void systemContextSkipsUserFillButStillFillsTime() {
+        AppContext.current().setUserId(null);
+        User user = user("job", 1);
+        repository.insert(user);
+        assertThat(user.getCreatedBy()).isNull();
+        assertThat(user.getCreateTime()).isNotNull();
     }
 
     @Test
     void tenantIsolation() {
         repository.insert(user("a", 1));
-        AppContext.current().setTenantId(2L);
+        AppContext.current().setTenantId("t-2");
         repository.insert(user("b", 2));
 
-        AppContext.current().setTenantId(1L);
+        AppContext.current().setTenantId("t-1");
         assertThat(repository.list(new UserQuery())).extracting(User::getUsername).containsExactly("a");
 
-        AppContext.current().setTenantId(2L);
+        AppContext.current().setTenantId("t-2");
         assertThat(repository.list(new UserQuery())).extracting(User::getUsername).containsExactly("b");
 
         // 显式忽略租户
@@ -75,10 +107,16 @@ class RepositoryIntegrationTest {
     }
 
     @Test
-    void noTenantContextMeansNoFilter() {
+    void missingTenantContextIsRejected() {
         repository.insert(user("a", 1));
         AppContext.clear();
-        assertThat(repository.list(new UserQuery())).hasSize(1);
+        // fail-closed：无租户上下文的查询直接失败，而不是静默读到全量数据
+        // （MP 拦截器层抛出的异常会被 MyBatis 包装一层，因此断言根因）
+        assertThatThrownBy(() -> repository.list(new UserQuery()))
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasStackTraceContaining("租户ID");
+        // 平台任务的正确姿势是显式豁免
+        assertThat(repository.list(new UserQuery().ignoreTenant())).hasSize(1);
     }
 
     @Test
