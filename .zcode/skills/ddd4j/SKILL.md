@@ -1,7 +1,7 @@
 ---
 name: ddd4j
 description: DDD4J AI-first 极简 DDD 内核的复制式接入技能。当用户要求接入 ddd4j 框架、在新工程或现有工程集成 ddd4j、写新业务域的模型/Query/仓储/CRUD、或询问 ddd4j 的约定（单一类型、Query 后缀、租户隔离、审计填充）时触发。
-title: DDD4J 框架接入
+title: DDD4J框架
 category: 开发工具
 ---
 
