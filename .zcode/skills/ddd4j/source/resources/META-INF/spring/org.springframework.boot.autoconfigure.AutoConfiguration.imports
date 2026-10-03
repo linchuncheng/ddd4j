@@ -1,0 +1,2 @@
+com.ddd4j.cloud.config.Ddd4jAutoConfiguration
+com.ddd4j.cloud.web.Ddd4jWebConfiguration
