@@ -1,8 +1,0 @@
-com.ddd4j.cloud.data.config.BaseDataConfig
-com.ddd4j.cloud.data.config.PageHelperProperties
-com.ddd4j.cloud.data.mybatisplus.typehandlers.StringsTypeHandler
-com.ddd4j.cloud.data.mybatisplus.typehandlers.LongsTypeHandler
-com.ddd4j.cloud.data.mybatisplus.typehandlers.DoublesTypeHandler
-com.ddd4j.cloud.data.mybatisplus.typehandlers.IntegersTypeHandler
-com.ddd4j.cloud.data.mybatisplus.typehandlers.JSONObjectTypeHandler
-com.ddd4j.cloud.data.mybatisplus.typehandlers.JSONArrayTypeHandler

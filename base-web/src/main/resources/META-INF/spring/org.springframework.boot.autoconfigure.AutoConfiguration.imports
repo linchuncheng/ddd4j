@@ -1,5 +1,0 @@
-com.ddd4j.cloud.web.interceptor.WebLogInterceptor
-com.ddd4j.cloud.web.interceptor.WebContextInterceptor
-com.ddd4j.cloud.web.config.BaseWebConfig
-com.ddd4j.cloud.web.api.client.ClientAggregateController
-com.ddd4j.cloud.web.api.admin.AdminAggregateController

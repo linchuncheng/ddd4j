@@ -3,928 +3,240 @@
     <img width="100" src="https://github.com/linchuncheng.png">
   </a>
 </p>
-<h1 align="center"><a href="https://github.com/linchuncheng/ddd4j">DDD4J基础框架</a></h1>
-<h4 align="center">基于DDD（领域驱动设计）并支持SaaS平台的单体微服务基础框架</h4>
-<p align="center"><a href="README_EN.md">English</a> | 中文</p>
+<h1 align="center"><a href="https://github.com/linchuncheng/ddd4j">DDD4J 4.0</a></h1>
+<h4 align="center">AI-first 极简 DDD 内核：契约 + 显式仓库 + Web 核心</h4>
 <p align="center">
-  <img src="https://img.shields.io/badge/language-JDK17-red.svg">
-  <img src="https://img.shields.io/hexpm/l/plug.svg">
-  <img src="https://img.shields.io/badge/snapshot-3.0.0-blue.svg">
-  <img src="https://img.shields.io/badge/build-passing-brightgreen.svg">
+  <img src="https://img.shields.io/badge/language-JDK21-red.svg">
+  <img src="https://img.shields.io/badge/spring%20boot-3.5.x-blue.svg">
+  <img src="https://img.shields.io/badge/mybatis--plus-3.5.x-green.svg">
+  <img src="https://img.shields.io/badge/tests-39%20passing-brightgreen.svg">
   <img src="https://img.shields.io/github/stars/linchuncheng/ddd4j?style=social"><br>
   如果这个项目对你有帮助，请点个 ⭐ Star 支持一下，感谢！
 </p>
 
-#### 笔者在开发过程中不断汲取前辈的优秀代码经验，融入自己的代码特色，提炼高复用性代码，并对中间件进行浅封装。旨在快速搭建SaaS业务系统，减少繁琐的CRUD定义，减少不必要的xml代码书写，通过对Model、Query对象的继承，即可实现你想要的CRUD，提高整体代码效率。
+## 为什么推倒重写
 
-> 该框架搭配COLA-DDD架构使用效果更佳，详见底部
+3.x 时代，框架的核心价值是"帮人省掉 CRUD 样板代码"。AI 时代，样板代码恰恰是 AI 最擅长写的——而 3.x 为省样板付出的代价（启动时全 classpath 扫描、字符串寻址的通用 REST 端点、静态 ServiceLocator、五种 MQ 客户端全量编译）反而成了人和 AI 理解代码的最大障碍。
+
+于是 4.0 按四条原则重写：
+
+| 原则 | 含义 |
+|------|------|
+| 显式 > 魔法 | 无 classpath 扫描、无字符串寻址、全构造注入，每个行为都能 grep 到出处 |
+| 单一类型 | 领域模型即持久化实体（`@TableName` 直接标在模型上），不再强制 PO/Model 双轨 |
+| 最小依赖 | 框架自身只依赖 Spring Boot + MyBatis-Plus + Jackson，不依赖 Hutool |
+| 内核 > 全家桶 | 只做契约、CRUD、Web 三件事；MQ/Excel/OSS 等直接用官方 starter，AI 写这些调用毫不费力 |
+
+技术栈与 [fengqun-scm](https://github.com/linchuncheng) 后端保持一致：**JDK 21、Spring Boot 3.5.x、MyBatis-Plus 3.5.x**。响应契约与现网前端对齐（`code` 为字符串，成功 `"200"`）。
+
+## 快速开始
+
+### 引入依赖
+
+```xml
+<dependency>
+    <groupId>com.ddd4j.cloud</groupId>
+    <artifactId>ddd4j-core</artifactId>
+    <version>4.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+### 定义模型、查询、仓储
+
+模型即实体，一张表三段代码，全部显式：
+
+```java
+// 1. 模型：直接标注 MyBatis-Plus 注解
+@Data
+@TableName("t_user")
+public class User {
+    @TableId(type = IdType.ASSIGN_ID)
+    private Long id;
+    private String username;
+    private Integer age;
+    private Long tenantId;
+    @OnCreate                       // 插入时自动填充当前时间
+    private LocalDateTime createTime;
+    @OnUpdate                       // 插入和更新时自动填充当前时间
+    private LocalDateTime updateTime;
+}
+
+// 2. 查询：字段名 + 条件后缀 即查询条件
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class UserQuery extends Query {
+    private String username;        // username = ?
+    private String usernameLike;    // username LIKE '%?%'
+    private Integer ageGe;          // age >= ?
+}
+
+// 3. 仓储：继承即可，全部方法显式可查
+@Repository
+public class UserRepository extends MybatisRepository<User, UserQuery> {
+    public UserRepository(UserMapper mapper) {
+        super(mapper);
+    }
+}
+```
+
+> `UserMapper` 是 MyBatis-Plus 的标准要求：`public interface UserMapper extends BaseMapper<User> {}`
+
+### 使用
+
+```java
+@Service
+@RequiredArgsConstructor
+public class UserAppService {
+    private final UserRepository users;
+
+    @Transactional
+    public Long create(UserCreateCmd cmd) {
+        User user = new User();
+        user.setUsername(cmd.getUsername());
+        users.insert(user);                     // 审计字段、租户ID自动处理
+        return user.getId();
+    }
+
+    public Page<User> page(UserQuery query) {
+        return users.page(query);               // 条件、排序、分页由 Query 声明
+    }
+}
+```
+
+Controller 返回任意对象，框架自动包装为统一响应；抛出 `BizException` 自动转换为失败响应：
+
+```java
+@GetMapping("/{id}")
+public User detail(@PathVariable Long id) {     // 响应: {"code":"200","msg":"操作成功","data":{...}}
+    return users.get(id);
+}
+
+public void rename(Long id, String name) {
+    User db = users.get(id);
+    if (db == null) throw new BizException("用户不存在");
+    db.setUsername(name);
+    users.updateById(db);
+}
+```
+
+## Query 条件后缀约定
+
+字段名 = 列名驼峰 + 后缀（大小写敏感），翻译规则显式实现在 `QueryTranslator`（约 200 行，可单测、可 grep）：
+
+| 后缀 | SQL | 示例 |
+|------|-----|------|
+| （无） | `=` | `username` |
+| `In` / `NotIn` | `IN` / `NOT IN`，值支持集合、数组、逗号分隔字符串 | `statusIn` |
+| `Like` | `LIKE '%值%'` | `nicknameLike` |
+| `LikeLeft` | `LIKE '值%'`（前缀匹配） | `nicknameLikeLeft` |
+| `LikeRight` | `LIKE '%值'`（后缀匹配） | `nicknameLikeRight` |
+| `Not` | `!=` | `statusNot` |
+| `Gt` / `Lt` / `Ge` / `Le` | `>` / `<` / `>=` / `<=` | `ageGe` |
+| `Start` / `End` | `>=` / `<=`（时间范围语义化别名） | `createTimeStart` |
+| `IsNull` | `IS NULL`（true）/ `IS NOT NULL`（false） | `emailIsNull` |
+
+排序写在 `orderBys` 字段：`createTime_DESC,id_ASC`（列名经过合法性校验，防注入）。
+
+复杂条件走逃生口，直接操作 Wrapper：`users.search(w -> w.apply("date(create_time) = {0}", today))`。
+
+## 内置能力
+
+### 租户隔离
+
+默认开启。写入时自动追加 `tenant_id`，查询时自动过滤（基于 MyBatis-Plus `TenantLineInnerInterceptor`），租户值来自 `AppContext`。当前请求没有租户时不过滤（适合平台级任务）。
+
+```java
+users.list(query);                 // 自动追加 tenant_id = 当前租户
+users.list(query.ignoreTenant());  // 显式跳过，仅本次生效
+```
+
+### 请求上下文
+
+`ContextInterceptor` 从请求头解析并写入 `AppContext`，请求结束自动清理；`traceId` 同时写入 MDC（日志 pattern 加 `%X{traceId}` 即可）和响应头。
+
+| 请求头 | 含义 |
+|--------|------|
+| `X-User-Id` | 当前用户 |
+| `X-Tenant-Id` | 当前租户 |
+| `X-Trace-Id` | 链路ID，缺省自动生成并回写响应头 |
+
+跨线程显式传递，不做任何隐式继承：
+
+```java
+executor.submit(AppContext.wrap(() -> audit(userId())));   // 携带快照，执行后清理
+```
+
+### 统一响应与异常
+
+| 场景 | 响应 |
+|------|------|
+| 成功 | `{"code":"200","msg":"操作成功","data":...}` |
+| `BizException("xxx")` | `{"code":"500","msg":"xxx"}` |
+| `BizException(403, "xxx")` | `{"code":"403","msg":"xxx"}` |
+| 参数校验失败 | `{"code":"400","msg":"keyword 不能为空"}` |
+| 未知异常 | `{"code":"500","msg":"操作失败"}`，服务端记录 traceId |
+
+HTTP 状态保持 200，业务码在 body 中。标注 `@RawResponse` 的端点跳过包装。
+
+## 配置项
+
+```yaml
+ddd4j:
+  tenant:
+    enabled: true          # 租户隔离开关，默认 true
+    column: tenant_id      # 租户字段名，默认 tenant_id
+    exclude-tables: []     # 不参与租户隔离的表
+  web:
+    enabled: true          # 上下文/响应包装/全局异常开关，默认 true
+    user-header: X-User-Id
+    tenant-header: X-Tenant-Id
+    trace-header: X-Trace-Id
+  data-config:
+    db-type: mysql         # 分页方言
+```
+
+## COLA 分层建议
 
 ![COLA-DDD架构](COLA-DDD架构.png)
 
-
-### 框架以组件的方式进行划分，包括：
-
-| 组件 | 说明 | 依赖关系 |
-|------|------|----------|
-| base-bom | 基础依赖组件 | 无 |
-| base-core | 基础核心组件 | 无 |
-| base-kit | 基础工具箱 | base-core |
-| base-data | 基础数据组件 | base-core |
-| base-web | 基础WEB组件 | base-core |
-| base-mq | 基础MQ组件 | base-core |
-| base-excel | EXCEL组件 | base-core |
-| base-oss | 对象存储组件 | base-core |
-| base-sms | 短信组件 | base-kit |
-
-### 整体设计理念：简洁、灵活、包容
-
-## DDD4j框架结构
-
-```
-base
-├── base-bom                         // 基础依赖组件
-│   └── pom.xml                      // 基准版本依赖管理POM
-├── base-core                        // 基础核心组件
-│   ├── config                       // 核心配置
-│   ├── context                      // 核心上下文
-│   ├── contract                     // 核心契约
-│   ├── kit                          // 核心工具
-├── base-data                        // 基础数据组件
-│   ├── annotation                   // 数据注解
-│   ├── config                       // 数据配置
-│   ├── kit                          // 数据工具
-│   └── mybatisplus                  // MyBatis-Plus扩展
-│       ├── handler                  // 处理器
-│       └── injector                 // 注入器
-├── base-excel                       // EXCEL组件
-│   ├── annotation                   // Excel注解
-│   ├── aop                          // Excel切面
-│   ├── converters                   // 类型转换器
-│   ├── enhance                      // 增强器
-│   ├── exception                    // 异常处理
-│   ├── handler                      // 处理器
-│   │   ├── listener                 // 监听器
-│   │   ├── sheet                    // Sheet处理器
-│   │   └── style                    // 样式处理器
-│   ├── head                         // 表头处理
-│   ├── processor                    // 处理器
-│   ├── properties                   // 配置属性
-│   ├── utils                        // 工具类
-│   ├── validate                     // 校验器
-│   └── vo                           // 值对象
-├── base-kit                         // 基础工具箱
-│   ├── cache                        // 缓存工具
-│   ├── enums                        // 枚举工具
-│   ├── lang                         // 语言工具
-│   └── web                          // WEB工具
-├── base-mq                          // 基础MQ组件
-│   ├── config                       // MQ配置
-│   ├── core                         // MQ核心组件
-│   └── impl                         // MQ实现，目前实现了Kafka、Rabbit、Redis发布订阅、RedisStream、Rocket
-│       └── event                    // 事件实现
-├── base-oss                         // 对象存储组件
-│   ├── config                       // OSS配置
-│   ├── contract                     // OSS契约
-│   │   ├── dto                      // 数据传输对象
-│   │   └── enums                    // 枚举定义
-│   └── service                      // OSS服务
-│       └── impl                     // OSS服务实现
-├── base-sms                         // 短信组件
-│   ├── config                       // 短信配置
-│   ├── contract                     // 短信契约
-│   │   ├── constant                 // 短信常量
-│   │   └── dto                      // 数据传输对象
-│   ├── factory                      // 短信工厂
-│   └── service                      // 短信服务
-├── base-web                         // 基础WEB组件
-│   ├── annotation                   // WEB注解
-│   ├── api                          // 基础控制器
-│   ├── config                       // WEB配置
-│   ├── core                         // WEB核心组件
-│   ├── interceptor                  // WEB拦截器
-│   └── utils                        // WEB工具类
-└── pom.xml
-```
-
-## 核心版本
-
-| 框架 | 版本 |
-|------|------|
-| JDK | 17+ |
-| Spring Boot | 3.2.5 |
-| Spring Cloud | 2023.0.1 |
-| Spring Cloud Alibaba | 2023.0.1.0 |
-| MyBatis-Plus | 3.5.5 |
-| Hutool | 5.8.26 |
-
-## 使用说明
-
-### 环境准备
-
-Clone代码到本地，添加为Maven工程，修改根目录 `pom.xml` 内的仓库地址为自己的私仓并 Deploy 部署
-
-### 部署脚本
-
-项目提供了 `deploy.sh` 脚本用于快速部署到 Maven 仓库：
-
-| 命令 | 说明 |
-|------|------|
-| `./deploy.sh -s` | 部署到 snapshot 仓库 |
-| `./deploy.sh -r` | 部署到 release 仓库（自动移除 -SNAPSHOT 后缀） |
-| `./deploy.sh -h` | 显示帮助信息 |
-
-**配置说明**：部署前需修改 `deploy.sh` 中的仓库配置：
-
-```bash
-SNAPSHOT_REPO_ID="snapshots"
-SNAPSHOT_REPO_URL="http://your-nexus-server/repository/maven-snapshots/"
-
-RELEASE_REPO_ID="releases"
-RELEASE_REPO_URL="http://your-nexus-server/repository/maven-releases/"
-```
-
-### 集成方式
-
-顶层pom.xml集成base-bom依赖管理，统一第三方依赖包版本
-
-```xml
-……
-<dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>com.ddd4j.cloud</groupId>
-            <artifactId>base-bom</artifactId>
-            <version>3.0.0-SNAPSHOT</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
-……
-```
-
-### 组件依赖
-
-module 的 `pom.xml` 按需引入 base 组件，集成度高的组件无需重复引入
-
-```xml
-……
-<!--基础核心组件-->
-<dependency>
-    <groupId>com.ddd4j.cloud</groupId>
-    <artifactId>base-core</artifactId>
-</dependency>
-<!--基础数据组件-->
-<dependency>
-    <groupId>com.ddd4j.cloud</groupId>
-    <artifactId>base-data</artifactId>
-</dependency>
-<!--基础工具箱-->
-<dependency>
-    <groupId>com.ddd4j.cloud</groupId>
-    <artifactId>base-kit</artifactId>
-</dependency>
-<!--基础MQ组件-->
-<dependency>
-    <groupId>com.ddd4j.cloud</groupId>
-    <artifactId>base-mq</artifactId>
-</dependency>
-<!--基础WEB组件-->
-<dependency>
-    <groupId>com.ddd4j.cloud</groupId>
-    <artifactId>base-web</artifactId>
-</dependency>
-<!--EXCEL组件-->
-<dependency>
-    <groupId>com.ddd4j.cloud</groupId>
-    <artifactId>base-excel</artifactId>
-</dependency>
-<!--对象存储组件-->
-<dependency>
-    <groupId>com.ddd4j.cloud</groupId>
-    <artifactId>base-oss</artifactId>
-</dependency>
-<!--短信组件-->
-<dependency>
-    <groupId>com.ddd4j.cloud</groupId>
-    <artifactId>base-sms</artifactId>
-</dependency>
-……
-```
-
-## COLA-DDD架构
-
-![COLA-DDD架构.png](COLA-DDD架构.png)
-
-本架构以 DDD 为业务建模核心，以整洁架构/六边形架构为分层与依赖指导思想，融合 CQRS/EDA 实现入参级读写分离与领域事件驱动，借助 COLA 提供标准化分层与工程脚手架，打造高可维护、易扩展的企业级应用架构。
-
-### 架构设计思想
-
-| 思想 | 说明 |
-|------|------|
-| DDD | 以业务领域为中心，通过限界上下文、聚合根、实体、值对象等概念建立领域模型 |
-| 整洁架构/六边形架构 | 分离技术实现与业务逻辑，外层依赖内层，领域层不受外部细节污染 |
-| CQRS | 查询与命令分离，提升可维护性与性能优化空间 |
-| EDA | 领域事件驱动，接口层定义领域事件，领域层定义内部事件，分别由适配层（MQ）和应用层（Event）处理器执行 |
-| COLA规范 | 提供分层规范与工程实践，强调模块职责细分、依赖约束、扩展点机制 |
-
-### 分层职责说明
-
-| 分层 | 依赖 | 职责与关键包 |
-|------|------|-------------|
-| 接口层 | - | 对外暴露服务接口；`common`、`dto`、`event`、`service` |
-| 适配层 | 应用层、接口层、领域层 | 接入外部请求，适配内部调用；`http`、`rpc`、`mq`、`job`、`repo` |
-| 应用层 | 领域层 | 编排业务用例，控制事务边界；`service`、`event` |
-| 领域层 | 无 | 封装核心业务规则；聚合包 `command`、`query`、`model`、`repo`，公共包 `common`（`constant`、`event`、`vo`） |
-| 基础设施层 | - | 提供工程配置；`config` |
-
-### 依赖流向
+框架只约束依赖方向，不约束工程结构。推荐分层：
 
 ```
 调用流向：外部 → Adapter → Application → Domain
 实现关系：Adapter 实现 Api.service、Domain.repo
 ```
 
-- 外层依赖内层，领域层无外部依赖
-- 接口层定义 `service` 抽象接口，由适配层实现
-- 领域层定义 `repo` 仓库接口，由适配层实现
-- 基础设施层提供工程配置，技术组件已封装到 DDD4j 框架
-
-## 工程结构
-
-```
-{project}
-├── {project}-api                     // 接口模块
-│   └── src/main/java/{package}/api
-│       ├── common                   // 公共定义，如公共常量、枚举、异常、工具类等
-│       └── {context}                // 上下文（如user、order）
-│           ├── dto                  // 外部数据传输对象
-│           ├── event                // 上下文事件（MQ）
-│           └── service              // 服务接口
-├── {project}-web                     // 启动模块
-│   ├── src/main/java/{package}
-│   │   ├── {Project}Application.java // 启动类
-│   │   ├── adapter                   // 适配层
-│   │   │   ├── http                  // HTTP接口适配
-│   │   │   │   ├── admin              // 管理端
-│   │   │   │   └── client             // 客户端
-│   │   │   ├── job                   // 定时任务适配
-│   │   │   ├── mq                    // MQ消费适配
-│   │   │   ├── repo                  // 仓库适配
-│   │   │   │   ├── dao               // 数据访问对象
-│   │   │   │   ├── entity            // 持久化实体
-│   │   │   │   └── impl              // 仓库实现
-│   │   │   └── rpc                   // RPC适配
-│   │   ├── application               // 应用层
-│   │   │   ├── event                 // 事件处理器
-│   │   │   └── service               // 应用服务
-│   │   ├── domain                    // 领域层
-│   │   │   ├── {aggregate}           // 聚合
-│   │   │   │   ├── command           // 命令
-│   │   │   │   ├── model             // 模型
-│   │   │   │   ├── query             // 查询
-│   │   │   │   └── repo              // 仓库接口
-│   │   │   └── common                // 公共域
-│   │   │       ├── constant          // 常量
-│   │   │       ├── event             // 内部事件
-│   │   │       └── vo                // 值对象
-│   │   └── infrastructure            // 基础设施层
-│   │       └── config                // 工程配置
-│   └── src/main/resources
-│       ├── application.yml
-│       └── mapper                    // MyBatis映射文件
-└── pom.xml
-```
-
-## 案例演示
-
-### Demo工程结构
-
-```
-demo
-├── demo-api                           // 接口模块
-│   └── src/main/java/com/example/demo/api
-│       ├── common                      // 公共定义
-│       └── user                        // 用户上下文
-│           ├── dto                     // 外部数据传输对象
-│           │   ├── UserCreateCmd.java
-│           │   └── UserExcelDTO.java
-│           ├── event                   // 领域事件
-│           │   └── UserSyncMQEvent.java
-│           └── service                 // 服务接口
-│               └── UserDubboService.java
-├── demo-web                           // 启动模块
-│   ├── src/main/java/com/example/demo
-│   │   ├── DemoApplication.java        // 启动类
-│   │   ├── adapter                     // 适配层
-│   │   │   ├── http                    // HTTP接口适配
-│   │   │   │   ├── admin                // 管理端
-│   │   │   │   │   └── UserAdminController.java
-│   │   │   │   └── client               // 客户端
-│   │   │   │       └── UserClientController.java
-│   │   │   ├── mq                      // MQ消费适配
-│   │   │   │   └── UserMQListener.java
-│   │   │   ├── repo                    // 仓库适配
-│   │   │   │   ├── dao                 // 数据访问对象
-│   │   │   │   │   └── UserDAO.java
-│   │   │   │   ├── entity              // 持久化实体
-│   │   │   │   │   └── UserPO.java
-│   │   │   │   └── impl                // 仓库实现
-│   │   │   │       └── UserRepositoryImpl.java
-│   │   │   └── rpc                    // RPC适配
-│   │   │       └── UserDubboServiceImpl.java
-│   │   ├── application                 // 应用层
-│   │   │   ├── event                   // 事件处理器
-│   │   │   │   └── UserEventHandler.java
-│   │   │   └── service                 // 应用服务
-│   │   │       └── UserAppService.java
-│   │   ├── domain                      // 领域层
-│   │   │   ├── common                  // 公共域
-│   │   │   │   ├── event                // 内部事件
-│   │   │   │   │   └── UserCreatedEvent.java
-│   │   │   │   └── vo                  // 值对象
-│   │   │   │       └── UserStateVO.java
-│   │   │   └── user                    // 用户域
-│   │   │       ├── command             // 命令
-│   │   │       │   └── UserCreateCmd.java
-│   │   │       ├── model               // 模型
-│   │   │       │   └── User.java
-│   │   │       ├── query               // 查询
-│   │   │       │   └── UserQuery.java
-│   │   │       └── repo                // 仓库接口
-│   │   │           └── UserRepository.java
-│   │   └── infrastructure              // 基础设施层
-│   │       └── config                  // 工程配置
-│   │           └── RocketMQConfig.java
-│   └── src/main/resources
-│       ├── application.yml
-│       └── mapper                      // MyBatis映射文件
-│           └── UserMapper.xml
-└── pom.xml
-```
-
-### 模块依赖关系
-
-| 模块 | 依赖 | 说明 |
-|------|------|------|
-| demo-api | 无 | 接口定义，被其他模块依赖 |
-| demo-web | demo-api | 启动入口，聚合所有层 |
-
-### 接口层
-
-#### 数据传输对象
-
-```java
-package com.example.demo.api.user.dto;
-
-import lombok.Data;
-
-@Data
-public class UserCreateCmd {
-    private String username;
-    private String nickname;
-    private String email;
-}
-```
-
-```java
-package com.example.demo.api.user.dto;
-
-import com.ddd4j.cloud.excel.annotation.ExcelLine;
-import lombok.Data;
-
-@Data
-public class UserExcelDTO {
-    @ExcelLine
-    private Integer lineNum;
-    private String username;
-    private String nickname;
-    private String email;
-}
-```
-
-#### RPC服务接口
-
-```java
-package com.example.demo.api.user.service;
-
-import com.example.demo.api.user.dto.UserCreateCmd;
-import com.example.demo.domain.user.model.User;
-
-public interface UserDubboService {
-    
-    Long createUser(UserCreateCmd cmd);
-    
-    User getById(Long id);
-    
-    void updateStatus(Long id, Integer status);
-}
-```
-
-#### 领域事件
-
-```java
-package com.example.demo.api.user.event;
-
-import com.ddd4j.cloud.core.contract.MQEvent;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
-
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-public class UserSyncMQEvent extends MQEvent {
-    private Long userId;
-    private String action; // CREATE, UPDATE, DELETE
-}
-```
-
-### 领域层
-
-#### 模型
-
-```java
-package com.example.demo.domain.user.model;
-
-import com.ddd4j.cloud.core.contract.Model;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
-
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-public class User extends Model {
-    private Long id;
-    private String username;
-    private String nickname;
-    private String email;
-    private Integer status;
-    private Long tenantId;
-}
-```
-
-#### 查询
-
-```java
-package com.example.demo.domain.user.query;
-
-import com.ddd4j.cloud.core.contract.Query;
-import com.example.demo.domain.user.model.User;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
-
-import java.time.LocalDateTime;
-
-@Data
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-public class UserQuery extends Query<User> {
-    // 精确匹配
-    private Long id;
-    private String username;
-    private Integer status;
-    private Long tenantId;
-    
-    // 模糊查询（后缀Like自动转换为 LIKE '%xxx%'）
-    private String nicknameLike;
-    
-    // 范围查询（后缀In自动转换为 IN (...)）
-    private String emailIn;
-    
-    // 时间范围查询
-    private LocalDateTime createTimeStart;
-    private LocalDateTime createTimeEnd;
-}
-```
-
-#### 命令
-
-```java
-package com.example.demo.domain.user.command;
-
-import lombok.Data;
-
-@Data
-public class UserCreateCmd {
-    private String username;
-    private String nickname;
-    private String email;
-}
-```
-
-#### 仓库接口
-
-```java
-package com.example.demo.domain.user.repo;
-
-import com.ddd4j.cloud.core.contract.BaseRepository;
-import com.example.demo.domain.user.model.User;
-import com.example.demo.domain.user.query.UserQuery;
-
-public interface UserRepository extends BaseRepository<User, UserQuery> {
-}
-```
-
-#### 内部事件
-
-```java
-package com.example.demo.domain.common.event;
-
-import com.ddd4j.cloud.core.contract.DomainEvent;
-import com.example.demo.domain.user.model.User;
-import lombok.Getter;
-
-@Getter
-public class UserCreatedEvent extends DomainEvent<User> {
-    
-    public UserCreatedEvent(User user) {
-        super(user);
-    }
-}
-```
-
-### 适配层
-
-#### HTTP接口适配
-
-##### 管理端
-
-```java
-package com.example.demo.adapter.http.admin;
-
-import com.example.demo.api.user.dto.UserCreateCmd;
-import com.example.demo.api.user.dto.UserExcelDTO;
-import com.example.demo.application.service.UserAppService;
-import com.example.demo.domain.user.model.User;
-import com.example.demo.domain.user.query.UserQuery;
-import com.ddd4j.cloud.core.contract.Page;
-import com.ddd4j.cloud.core.contract.R;
-import com.ddd4j.cloud.excel.annotation.ExportExcel;
-import com.ddd4j.cloud.excel.annotation.ImportExcel;
-import com.ddd4j.cloud.web.api.AggregateController;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-
-@Tag(name = "用户管理-管理端")
-@RestController
-@RequestMapping("/admin/user")
-@RequiredArgsConstructor
-public class UserAdminController implements AggregateController {
-    private final UserAppService userAppService;
-    
-    @Operation(summary = "创建用户")
-    @PostMapping("/create")
-    public R<Void> create(@RequestBody UserCreateCmd cmd) {
-        userAppService.create(cmd);
-        return R.ok();
-    }
-    
-    @Operation(summary = "分页查询")
-    @PostMapping("/page")
-    public R<Page<User>> page(@RequestBody UserQuery query) {
-        return R.ok(userAppService.page(query));
-    }
-    
-    @Operation(summary = "导出Excel")
-    @ExportExcel(name = "用户列表")
-    @GetMapping("/export")
-    public List<UserExcelDTO> export(UserQuery query) {
-        return query.list();
-    }
-    
-    @Operation(summary = "导入Excel")
-    @PostMapping("/import")
-    public R<Void> importExcel(@ImportExcel List<UserExcelDTO> users) {
-        userAppService.importUsers(users);
-        return R.ok();
-    }
-    
-    // 继承AggregateController后自动拥有以下CRUD接口：
-    // GET  /{model}/detail/{id}   - 根据ID查询详情
-    // POST /{model}/list          - 列表查询
-    // POST /{model}/exist         - 是否存在
-    // POST /{model}/count         - 计数
-    // POST /{model}/modify        - 修改
-    // POST /{model}/save          - 保存（创建或修改）
-    // POST /{model}/remove/{ids}  - 批量删除
-}
-```
-
-##### 客户端
-
-```java
-package com.example.demo.adapter.http.client;
-
-import com.example.demo.application.service.UserAppService;
-import com.example.demo.domain.user.model.User;
-import com.example.demo.domain.user.query.UserQuery;
-import com.ddd4j.cloud.core.contract.Page;
-import com.ddd4j.cloud.core.contract.R;
-import com.ddd4j.cloud.web.api.AggregateController;
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-
-@Tag(name = "用户管理-客户端")
-@RestController
-@RequestMapping("/client/user")
-@RequiredArgsConstructor
-public class UserClientController implements AggregateController {
-    private final UserAppService userAppService;
-    
-    @Operation(summary = "分页查询")
-    @PostMapping("/page")
-    public R<Page<User>> page(@RequestBody UserQuery query) {
-        return R.ok(userAppService.page(query));
-    }
-    
-    // 继承AggregateController后自动拥有以下CRUD接口：
-    // GET  /{model}/detail/{id}   - 根据ID查询详情
-    // POST /{model}/list          - 列表查询
-}
-```
-
-#### 仓库适配
-
-##### 持久化实体
-
-```java
-package com.example.demo.adapter.repo.entity;
-
-import com.baomidou.mybatisplus.annotation.*;
-import com.ddd4j.cloud.data.annotation.OnCreate;
-import com.ddd4j.cloud.data.annotation.OnUpdate;
-import com.ddd4j.cloud.data.annotation.TenantId;
-import lombok.Data;
-
-import java.time.LocalDateTime;
-
-@Data
-@TableName("t_user")
-public class UserPO {
-    @TableId(type = IdType.ASSIGN_ID)
-    private Long id;
-    
-    private String username;
-    
-    private String nickname;
-    
-    private String email;
-    
-    private Integer status;
-    
-    @TenantId
-    private Long tenantId;
-    
-    @OnCreate
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createTime;
-    
-    @OnUpdate
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updateTime;
-    
-    @TableLogic
-    private Integer deleted;
-}
-```
-
-##### 数据访问对象
-
-```java
-package com.example.demo.adapter.repo.dao;
-
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.ddd4j.cloud.core.contract.annotation.DAO;
-import com.example.demo.adapter.repo.entity.UserPO;
-import com.example.demo.domain.user.model.User;
-import com.example.demo.domain.user.query.UserQuery;
-import org.apache.ibatis.annotations.Mapper;
-
-@Mapper
-@DAO(entity = UserPO.class, model = User.class, query = UserQuery.class)
-public interface UserDAO extends BaseMapper<UserPO> {
-}
-```
-
-##### 仓库实现
-
-```java
-package com.example.demo.adapter.repo.impl;
-
-import com.example.demo.adapter.repo.dao.UserDAO;
-import com.example.demo.adapter.repo.entity.UserPO;
-import com.example.demo.domain.user.model.User;
-import com.example.demo.domain.user.query.UserQuery;
-import com.example.demo.domain.user.repo.UserRepository;
-import org.springframework.stereotype.Repository;
-
-@Repository
-public class UserRepositoryImpl implements UserRepository {
-    
-    private final UserDAO userDAO;
-    
-    public UserRepositoryImpl(UserDAO userDAO) {
-        this.userDAO = userDAO;
-    }
-    
-    // BaseRepository 默认实现已提供 CRUD 操作
-}
-```
-
-#### MQ消息消费适配
-
-```java
-package com.example.demo.adapter.mq;
-
-import com.ddd4j.cloud.core.contract.annotation.MQEventListener;
-import com.example.demo.api.user.event.UserSyncMQEvent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-@Slf4j
-@Component
-public class UserMQListener {
-    
-    @MQEventListener(topic = "USER_SYNC", tags = "CREATE")
-    public void onUserSync(UserSyncMQEvent event) {
-        log.info("收到用户同步消息: userId={}, action={}", event.getUserId(), event.getAction());
-    }
-}
-```
-
-#### RPC适配
-
-```java
-package com.example.demo.adapter.rpc;
-
-import com.example.demo.api.user.dto.UserCreateCmd;
-import com.example.demo.api.user.service.UserDubboService;
-import com.example.demo.application.service.UserAppService;
-import com.example.demo.domain.user.model.User;
-import lombok.RequiredArgsConstructor;
-import org.apache.dubbo.config.annotation.DubboService;
-
-@DubboService
-@RequiredArgsConstructor
-public class UserDubboServiceImpl implements UserDubboService {
-    
-    private final UserAppService userAppService;
-    
-    @Override
-    public Long createUser(UserCreateCmd cmd) {
-        return userAppService.create(cmd);
-    }
-    
-    @Override
-    public User getById(Long id) {
-        return userAppService.getById(id);
-    }
-    
-    @Override
-    public void updateStatus(Long id, Integer status) {
-        userAppService.updateStatus(id, status);
-    }
-}
-```
-
-### 应用层
-
-#### 应用服务
-
-```java
-package com.example.demo.application.service;
-
-import com.example.demo.api.user.dto.UserCreateCmd;
-import com.example.demo.api.user.dto.UserExcelDTO;
-import com.example.demo.domain.common.event.UserCreatedEvent;
-import com.example.demo.api.user.event.UserSyncMQEvent;
-import com.example.demo.domain.user.model.User;
-import com.example.demo.domain.user.query.UserQuery;
-import com.ddd4j.cloud.core.contract.Page;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-
-@Service
-@RequiredArgsConstructor
-public class UserAppService {
-    
-    @Transactional
-    public Long create(UserCreateCmd cmd) {
-        User user = User.builder().username(cmd.getUsername()).nickname(cmd.getNickname()).email(cmd.getEmail()).build();
-        // 充血模型：直接调用save方法保存
-        user.save();
-        // 发布领域事件
-        new UserCreatedEvent(user).publish();
-        // 发布MQ事件
-        UserSyncMQEvent.builder().userId(user.getId()).action("CREATE").build().publish();
-        return user.getId();
-    }
-    
-    public User getById(Long id) {
-        return UserQuery.builder().id(id).build().one();
-    }
-    
-    public Page<User> page(UserQuery query) {
-        return query.page();
-    }
-    
-    public void updateStatus(Long id, Integer status) {
-        User.builder().id(id).status(status).build().update();
-    }
-    
-    public void delete(Long id) {
-        UserQuery.builder().id(id).build().delete();
-    }
-    
-    @Transactional
-    public void importUsers(List<UserExcelDTO> users) {
-        users.forEach(vo -> {
-            User.builder().username(vo.getUsername()).nickname(vo.getNickname()).email(vo.getEmail()).build().save();
-        });
-    }
-}
-```
-
-#### 事件处理器
-
-```java
-package com.example.demo.application.event;
-
-import com.example.demo.domain.common.event.UserCreatedEvent;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Component;
-
-@Slf4j
-@Component
-public class UserEventHandler {
-    
-    @Async
-    @EventListener
-    public void onUserCreated(UserCreatedEvent event) {
-        log.info("用户创建成功: {}", event.get().getUsername());
-        // 发送通知、同步数据等
-    }
-}
-```
-
-### 基础设施层
-
-#### 工程配置
-
-```java
-package com.example.demo.infrastructure.config;
-
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class RocketMQConfig {
-    // RocketMQ相关配置
-}
-```
-
-### 配置文件
-
-```yaml
-# application.yml
-spring:
-  application:
-    name: demo-service
-  datasource:
-    url: jdbc:mysql://localhost:3306/demo?useUnicode=true&characterEncoding=utf-8
-    username: root
-    password: root
-    driver-class-name: com.mysql.cj.jdbc.Driver
-
-# DDD4J配置
-ddd4j:
-  mq:
-    impl: rocket
-    default-topic: DEMO_TOPIC
-    namespace: demo
+| 分层 | 职责 |
+|------|------|
+| api | 对外契约：dto、event、service 接口 |
+| adapter | http / rpc / mq / repo 实现（仓储实现放这里） |
+| application | 用例编排、事务边界、事件处理 |
+| domain | 聚合、业务规则、repo 接口 |
+
+## 从 3.x 迁移
+
+| 3.x | 4.0 |
+|-----|-----|
+| `Model.save()` / `query.page()` 充血模型 | `repository.insert(model)` / `repository.page(query)` 显式仓储 |
+| `@DAO(entity, model, query)` 双轨映射 | 模型即实体，一个类 |
+| `RepositoryContext` classpath 扫描 | 无扫描，泛型直接解析 |
+| `/{model}/*` 字符串寻址通用端点 | 每个聚合显式 Controller / Repository |
+| `R.code` Integer，成功 `0` | `R.code` 字符串，成功 `"200"`（对齐现网） |
+| `Page.size / current` | `Page.pageSize / currentPage / totalPages` |
+| 9 模块：kit/web/data/mq/excel/oss/sms… | 单模块内核，其余用官方 starter |
+| `TransmittableThreadLocal` 隐式传递 | `AppContext.wrap()` 显式传递 |
+| `base-sms` 博士通/阿里云、模板管理业务域 | 移出框架，属于业务工程 |
+
+## 设计取舍（明确不做）
+
+- 不做 MQ / Excel / OSS / SMS / 缓存 / 分布式锁封装——官方 starter 已经足够好
+- 不做 Feign / Nacos / Sentinel 集成——按项目需要自行引入
+- 不做多 MQ 实现抽象——需要时业务直接用官方 client
+- 不追求"零 Controller / 零 Repository"——显式代码是 AI 可维护性的前提
+
+## 构建
+
+```bash
+mvn clean verify    # 39 个测试（含 H2 集成测试）
+./deploy.sh -s      # 发布 SNAPSHOT 到私仓（脚本需先配置仓库地址）
 ```
