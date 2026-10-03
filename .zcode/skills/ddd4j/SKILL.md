@@ -86,6 +86,51 @@ cp -R <skill目录>/source/resources/* <项目>/src/main/resources/
 
 把 `test-template/` 复制到项目 `src/test/`（包路径保持），跑 `RepositoryIntegrationTest`：它用 H2 验证 CRUD、分页、租户隔离、审计填充四件事，全绿即接入成功。
 
+## 存量业务改造
+
+改造 = 把存量服务的手写 `LambdaQueryWrapper` 换成 Query 声明 + Repository 调用。**按业务域渐进，一次一个域**，与裸 Mapper 存量代码并存，不搞全局一刀切。
+
+### 改造前评估（值不值得改）
+
+| 信号 | 结论 |
+|---|---|
+| 查询条件 ≥3 个；同一 wrapper 构造在多个方法重复出现；大量 `cond != null, X::getY, val` 三段式 | 值得改，收益最大 |
+| 只有一两个条件的简单查询 | 不改，样板低于收益 |
+| 完全动态拼装（报表引擎、通用导出）、一次性脚本 | 不改；复杂条件留给 `search(w -> ...)` 逃生口 |
+
+先列出目标域内所有手写 wrapper 的位置和逐个评估，与用户确认后再动手。
+
+### 转换模式（wrapper ↔ Query 字段对照）
+
+| wrapper 写法 | Query 字段 |
+|---|---|
+| `w.eq(status != null, E::getStatus, status)` | `private String status;`（null/空白自动跳过，**条件开关直接删掉**——这是最大样板来源） |
+| `w.like(hasText(kw), E::getSkuName, kw)` | `private String skuNameLike;` |
+| `w.in(coll != null, E::getId, ids)` | `private List<String> idIn;`（ID 类型随工程） |
+| `w.ge(from != null, E::getCreateTime, from)` | `private LocalDateTime createTimeStart;`（时间范围用 `Start`/`End`，语义比 `Ge`/`Le` 清楚） |
+| `w.orderByDesc(E::getCreateTime)` | `private String orderBys = "createTime_DESC";` |
+| `new Page<>(current, size)` + `mapper.selectPage` | `repository.page(query)`，分页参数在 Query 上 |
+
+转换规则：
+
+- 条件字段名 = 列名驼峰 + 后缀，Controller 可以直接接收 Query 作入参（swagger 自动成文档）
+- 原 wrapper 里的**固定条件**（恒真业务条件，如"未删除"）由服务层显式赋值或落到 `search()` 逃生口，Query 字段只承载可变入参
+- 一次只转换一个服务方法，转完跑该域测试再继续
+
+### 存量实体：保留 BaseEntity，不改
+
+存量实体继续继承 BaseEntity、继续走自家 FieldFill 填充——与 ddd4j 审计体系互不干扰（注解体系不同，互为空操作），`MybatisRepository<M, Q>` 对实体零要求。**改造期间不要把存量实体换成注解风格**（纯 churn 无收益）；只有新建实体才用 `@OnCreate*` 注解风格。
+
+### 验收清单（每个域）
+
+1. 域级集成测试：参照 `test-template/RepositoryIntegrationTest` 覆盖该域主要查询，断言 CRUD/分页/租户行为
+2. 回归三点：分页 total 与改造前一致；租户过滤行为不变（改造不触碰租户拦截器）；列表结果抽样对比
+3. 收口标准：该域内不再有 `new LambdaQueryWrapper`（个别合理保留需注释原因）
+
+### 建议指令（可直接对 AI 说）
+
+> 用 ddd4j 改造 &lt;业务域&gt;：先按改造前评估列出该域所有手写 wrapper 的位置和逐个结论（值得/不值得 + 原因），我确认后逐方法转换，每个域补集成测试并跑验收清单。
+
 ## 编码约定（写代码时强制遵守）
 
 ### 单一类型（最重要）
