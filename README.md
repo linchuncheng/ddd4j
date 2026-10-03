@@ -190,6 +190,47 @@ users.list(query.ignoreTenant());  // 显式豁免，仅本次生效——平台
 executor.submit(AppContext.wrap(() -> audit(userId())));   // 携带快照，执行后清理
 ```
 
+### 领域事件
+
+进程内事件驱动：领域层/应用层发布，应用层监听处理。发布用 Spring 原生 `ApplicationEventPublisher`（显式注入，不用静态定位器）：
+
+```java
+@RequiredArgsConstructor
+public class UserAppService {
+    private final ApplicationEventPublisher publisher;
+
+    @Transactional
+    public Long create(UserCreateCmd cmd) {
+        User user = new User();
+        users.insert(user);
+        publisher.publishEvent(new UserCreatedEvent(user));   // 领域层定义事件类
+        return user.getId();
+    }
+}
+```
+
+事件定义：继承 `DomainEvent<T>`，自带 `eventId` / `occurredOn` / `get()`：
+
+```java
+public class UserCreatedEvent extends DomainEvent<User> {
+    public UserCreatedEvent(User payload) { super(payload); }
+}
+```
+
+应用层监听：
+
+```java
+@Async
+@EventListener
+public void onUserCreated(UserCreatedEvent event) {
+    // 异步处理器内 AppContext 自动传播，可直接取用户/租户/traceId
+}
+```
+
+- 事务内发布、提交后处理：`@TransactionalEventListener`
+- 异步上下文传播默认开启（`ddd4j.context-propagation=false` 关闭）；应用自定义任务执行器 Bean 时需自行应用 `AppContextTaskDecorator`
+- 跨服务 MQ 事件不在内核范围：直接用官方 MQ client
+
 ### 统一响应与异常
 
 | 场景 | 响应 |
@@ -217,6 +258,7 @@ ddd4j:
     trace-header: X-Trace-Id
   data-config:
     db-type: mysql         # 分页方言
+  context-propagation: true  # 异步任务自动传播 AppContext（关闭后 @Async 处理器拿不到用户/租户）
 ```
 
 ## COLA 分层建议

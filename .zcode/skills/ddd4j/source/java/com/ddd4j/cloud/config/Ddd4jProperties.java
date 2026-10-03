@@ -34,6 +34,8 @@ public class Ddd4jProperties {
     private Web web = new Web();
     // 注意：不能叫 Data，会与 lombok.Data 注解冲突
     private DataConfig dataConfig = new DataConfig();
+    // 异步任务是否自动传播 AppContext（装饰 Spring 默认任务执行器）
+    private boolean contextPropagation = true;
 
     @Data
     public static class Tenant {

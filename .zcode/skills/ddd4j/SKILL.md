@@ -175,6 +175,14 @@ public class UserRepository extends MybatisRepository<User, UserQuery> {
 
 `R`：`{code, msg, data}`，code 字符串，成功 `"200"`；`BizException(msg)` 自动转失败响应；参数校验失败 400；未知异常 500 + 服务端记 traceId。HTTP 状态恒 200，`@RawResponse` 跳过包装。
 
+### 领域事件（进程内）
+
+- 定义：`public class UserCreatedEvent extends DomainEvent<User>`（载荷 + eventId + occurredOn）
+- 发布：显式注入 `ApplicationEventPublisher`，`publisher.publishEvent(event)`——**不要**写静态定位器式的 `event.publish()`
+- 监听：应用层 `@EventListener`（同步）/ `@Async @EventListener`（异步，AppContext 自动传播）/ `@TransactionalEventListener`（事务提交后处理）
+- 异步传播由 Spring 默认任务执行器上的 `AppContextTaskDecorator` 实现（`ddd4j.context-propagation` 默认开）；应用自定义任务执行器 Bean 时自行应用该装饰器
+- 跨服务 MQ 事件不在内核范围，直接用官方 MQ client
+
 ### 上下文跨线程
 
 不做隐式继承：`executor.submit(AppContext.wrap(task))` 携带快照、执行后清理。userId/tenantId 均为 String。
@@ -194,4 +202,5 @@ ddd4j:
     trace-header: X-Trace-Id
   data-config:
     db-type: mysql
+  context-propagation: true  # 异步任务自动传播 AppContext
 ```
