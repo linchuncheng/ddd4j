@@ -1,6 +1,7 @@
 package com.ddd4j.cloud.contract;
 
 import com.ddd4j.cloud.context.AppContext;
+import com.ddd4j.cloud.context.SpringContext;
 import com.ddd4j.cloud.testsupport.User;
 import com.ddd4j.cloud.testsupport.UserCreatedEvent;
 import com.ddd4j.cloud.testsupport.UserEventHandler;
@@ -79,6 +80,19 @@ class DomainEventIntegrationTest {
         assertThat(handler.getAsyncUserId()).isEqualTo("u-9");
         assertThat(handler.getAsyncTenantId()).isEqualTo("t-9");
         assertThat(handler.getAsyncPayloadCount()).isEqualTo(1);
+    }
+
+    @Test
+    void publishInstanceMethodUsesSpringContext() {
+        UserCreatedEvent event = event();
+        event.publish();
+        assertThat(handler.getLastSyncPayload()).isSameAs(event.getPayload());
+    }
+
+    @Test
+    void springContextExposesBeans() {
+        assertThat(SpringContext.getBean(UserEventHandler.class)).isSameAs(handler);
+        assertThat(SpringContext.ctx()).isNotNull();
     }
 
     @Test

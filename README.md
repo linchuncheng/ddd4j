@@ -192,20 +192,16 @@ executor.submit(AppContext.wrap(() -> audit(userId())));   // 携带快照，执
 
 ### 领域事件
 
-进程内事件驱动：领域层/应用层发布，应用层监听处理。发布用 Spring 原生 `ApplicationEventPublisher`（显式注入，不用静态定位器）：
+进程内事件驱动：领域层/应用层发布，应用层监听处理。发布两种写法等价：
 
 ```java
-@RequiredArgsConstructor
-public class UserAppService {
-    private final ApplicationEventPublisher publisher;
-
-    @Transactional
-    public Long create(UserCreateCmd cmd) {
-        User user = new User();
-        users.insert(user);
-        publisher.publishEvent(new UserCreatedEvent(user));   // 领域层定义事件类
-        return user.getId();
-    }
+@Transactional
+public Long create(UserCreateCmd cmd) {
+    User user = new User();
+    users.insert(user);
+    new UserCreatedEvent(user).publish();      // 简便：直接发布（经 SpringContext 桥）
+    // 或显式注入 ApplicationEventPublisher 后：publisher.publishEvent(new UserCreatedEvent(user));
+    return user.getId();
 }
 ```
 

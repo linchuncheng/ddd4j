@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
 import com.ddd4j.cloud.context.AppContextTaskDecorator;
+import com.ddd4j.cloud.context.SpringContext;
 import com.ddd4j.cloud.data.Ddd4jTenantLineHandler;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -35,6 +36,12 @@ public class Ddd4jAutoConfiguration {
         }
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(properties.getDataConfig().getDbType()));
         return interceptor;
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public SpringContext springContext() {
+        return new SpringContext();
     }
 
     /**
