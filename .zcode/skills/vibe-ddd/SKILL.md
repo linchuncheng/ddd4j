@@ -1,13 +1,13 @@
 ---
-name: ddd4j
-description: DDD4J AI-first 极简 DDD 内核的复制式接入技能。当用户要求接入 ddd4j 框架、在新工程或现有工程集成 ddd4j、写新业务域的模型/Query/仓储/CRUD、或询问 ddd4j 的约定（单一类型、Query 后缀、租户隔离、审计填充）时触发。
-title: DDD4J框架
+name: vibe-ddd
+description: VibeDDD（ddd4j 内核）AI-first 极简 DDD 框架的复制式接入技能。当用户要求接入 VibeDDD/ddd4j 框架、在新工程或现有工程集成、写新业务域的模型/Query/仓储/CRUD、或询问其约定（单一类型、Query 后缀、租户隔离、审计填充、领域事件）时触发。
+title: VibeDDD
 category: 开发工具
 ---
 
-# DDD4J 框架接入（复制式）
+# VibeDDD 框架接入（复制式）
 
-DDD4J 是 AI-first 极简 DDD 内核：契约 + 显式仓储 + Web 核心，约 24 个类。本技能采用**复制式接入**——把框架源码复制进目标工程，项目完全拥有代码，AI 可直接读改，不依赖私仓发版。
+VibeDDD（框架坐标 com.ddd4j.cloud:ddd4j-core）是 AI-first 极简 DDD 内核：契约 + 显式仓储 + Web 核心，约 24 个类。本技能采用**复制式接入**——把框架源码复制进目标工程，项目完全拥有代码，AI 可直接读改，不依赖私仓发版。
 
 本目录结构：
 
@@ -77,8 +77,8 @@ cp -R <skill目录>/source/resources/* <项目>/src/main/resources/
 
 | 目标工程已有 | 处理方式 |
 |---|---|
-| 自己的 `MybatisPlusInterceptor`（含自家租户处理器） | ddd4j 的拦截器 Bean 标了 `@ConditionalOnMissingBean`，自动让位，无冲突。若还想用 `Query.ignoreTenant()`，在自己租户处理器的 `ignoreTable` 里加一行桥接：`if (TenantManager.isIgnored()) return true;`（`import com.ddd4j.cloud.data.TenantManager`） |
-| 自己的 R / GlobalExceptionHandler | 不要复制 ddd4j 的 `web/` 包（见第一步）；响应契约对齐 ddd4j 的（code 字符串 `"200"` 成功）则前端零感知 |
+| 自己的 `MybatisPlusInterceptor`（含自家租户处理器） | 框架的拦截器 Bean 标了 `@ConditionalOnMissingBean`，自动让位，无冲突。若还想用 `Query.ignoreTenant()`，在自己租户处理器的 `ignoreTable` 里加一行桥接：`if (TenantManager.isIgnored()) return true;`（`import com.ddd4j.cloud.data.TenantManager`） |
+| 自己的 R / GlobalExceptionHandler | 不要复制框架的 `web/` 包（见第一步）；响应契约对齐框架的（code 字符串 `"200"` 成功）则前端零感知 |
 | 自己的认证体系（JWT/网关） | 认证通过后把用户/租户写入 `AppContext`：`AppContext.current().setUserId(...)` / `setTenantId(...)`，并保证请求结束 `AppContext.clear()`；或写两个响应头 `X-User-Id`/`X-Tenant-Id` 交给 `ContextInterceptor`（仅全量接入时有） |
 | 上下文无用户的系统任务 | 审计操作人保持原值不填充，属正常行为 |
 
@@ -119,7 +119,7 @@ cp -R <skill目录>/source/resources/* <项目>/src/main/resources/
 
 ### 存量实体：保留 BaseEntity，不改
 
-存量实体继续继承 BaseEntity、继续走自家 FieldFill 填充——与 ddd4j 审计体系互不干扰（注解体系不同，互为空操作），`MybatisRepository<M, Q>` 对实体零要求。**改造期间不要把存量实体换成注解风格**（纯 churn 无收益）；只有新建实体才用 `@OnCreate*` 注解风格。
+存量实体继续继承 BaseEntity、继续走自家 FieldFill 填充——与框架审计体系互不干扰（注解体系不同，互为空操作），`MybatisRepository<M, Q>` 对实体零要求。**改造期间不要把存量实体换成注解风格**（纯 churn 无收益）；只有新建实体才用 `@OnCreate*` 注解风格。
 
 ### 验收清单（每个域）
 
@@ -129,7 +129,7 @@ cp -R <skill目录>/source/resources/* <项目>/src/main/resources/
 
 ### 建议指令（可直接对 AI 说）
 
-> 用 ddd4j 改造 &lt;业务域&gt;：先按改造前评估列出该域所有手写 wrapper 的位置和逐个结论（值得/不值得 + 原因），我确认后逐方法转换，每个域补集成测试并跑验收清单。
+> 用 VibeDDD 改造 &lt;业务域&gt;：先按改造前评估列出该域所有手写 wrapper 的位置和逐个结论（值得/不值得 + 原因），我确认后逐方法转换，每个域补集成测试并跑验收清单。
 
 ## 编码约定（写代码时强制遵守）
 

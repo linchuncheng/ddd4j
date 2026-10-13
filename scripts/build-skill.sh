@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Rebuild the ddd4j skill from this repo's src/ and install it.
-# source of truth = src/ ; .zcode/skills/ddd4j/source and test-template are build artifacts.
+# source of truth = src/ ; .zcode/skills/vibe-ddd/source and test-template are build artifacts.
 # Install target: ~/.agents/skills (cross-agent convention directory).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SKILL_DIR=".zcode/skills/ddd4j"
-INSTALL_DIR="${HOME}/.agents/skills/ddd4j"
+SKILL_DIR=".zcode/skills/vibe-ddd"
+INSTALL_DIR="${HOME}/.agents/skills/vibe-ddd"
 
 rm -rf "$SKILL_DIR/source" "$SKILL_DIR/test-template"
 mkdir -p "$SKILL_DIR/source" "$SKILL_DIR/test-template"
